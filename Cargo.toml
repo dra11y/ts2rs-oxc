@@ -1,0 +1,16 @@
+[package]
+name = "ts2rs-oxc"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+codegen = "0.2.0"
+itertools = "0.13.0"
+oxc_allocator = { version = "0.30.0", features = ["serialize"] }
+oxc_ast = { version = "0.30.0", features = ["serialize"] }
+oxc_codegen = "0.30.0"
+oxc_parser = "0.30.0"
+oxc_span = { version = "0.30.0", features = ["serialize"] }
+pico-args = "0.5.0"
+serde = { version = "1.0.210", features = ["derive"] }
+serde_json = "1.0.128"
