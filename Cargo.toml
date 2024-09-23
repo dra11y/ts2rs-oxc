@@ -1,6 +1,7 @@
 [package]
 name = "ts2rs-oxc"
 description = "Crate to convert TypeScript types to Rust types using the OXC project"
+repository = "https://github.com/dra11y/ts2rs-oxc"
 version = "0.1.0"
 edition = "2021"
 
