@@ -1,14 +1,19 @@
-use std::{any::type_name_of_val, collections::HashMap};
+use std::{
+    any::type_name_of_val,
+    collections::{HashMap, HashSet},
+};
 
 use codegen::Scope;
 use oxc_ast::{
-    ast::{TSArrayType, TSLiteral, TSSignature, TSType},
+    ast::{ImportDeclarationSpecifier, TSLiteral, TSSignature, TSType},
     Visit,
 };
 use oxc_span::Span;
 use serde::Serialize;
 
-use crate::rs_types::{EnumVariant, RSEnum, RSPrimitive, RSStruct, RSType, RSTypeMap};
+use crate::rs_types::{
+    RSEnum, RSEnumVariant, RSPrimitive, RSReference, RSStruct, RSType, RSTypeMap,
+};
 
 #[derive(Debug)]
 pub(crate) struct TypeScriptToRustVisitor {
@@ -16,6 +21,7 @@ pub(crate) struct TypeScriptToRustVisitor {
     pub(crate) scope: Scope,
     pub(crate) type_map: RSTypeMap,
     pub(crate) source_text: String,
+    pub(crate) ignore_unimplemented: bool,
 }
 
 impl Default for TypeScriptToRustVisitor {
@@ -24,6 +30,7 @@ impl Default for TypeScriptToRustVisitor {
             scope: Scope::new(),
             type_map: HashMap::new(),
             source_text: String::new(),
+            ignore_unimplemented: true,
         }
     }
 }
@@ -46,20 +53,68 @@ impl TypeScriptToRustVisitor {
     }
 }
 
-/// Resolves all types referenced to look up later.
-pub(crate) fn resolve_references(types: &mut RSTypeMap) {
+/// Resolves all lazy type references.
+pub(crate) fn resolve_references(types: &mut RSTypeMap) -> HashSet<RSReference> {
     let keys: Vec<_> = types.keys().cloned().collect();
+    println!("KEYS: {:#?}", keys);
+
+    let mut references: HashSet<RSReference> = HashSet::new();
 
     for name in keys {
-        if let Some(RSType::Reference(reference)) = types.get(&name) {
-            if let Some(referenced_type) = types.get(reference).cloned() {
-                if let Some(rs_type) = types.get_mut(&name) {
-                    *rs_type = referenced_type;
-                }
-            } else {
-                println!("Reference not found: {}", reference);
+        if let Some(rs_type) = types.get(&name).cloned() {
+            let resolved_type = resolve_type(&rs_type, types, &mut references);
+            if let Some(mut_ref_type) = types.get_mut(&name) {
+                *mut_ref_type = resolved_type;
             }
         }
+    }
+
+    references
+}
+
+fn resolve_type(
+    rs_type: &RSType,
+    types: &HashMap<String, RSType>,
+    references: &mut HashSet<RSReference>,
+) -> RSType {
+    match rs_type {
+        RSType::Reference(RSReference::Unresolved(ref_name)) => {
+            let new_ref = if types.contains_key(ref_name) {
+                RSReference::Resolved(ref_name.clone())
+            } else {
+                println!("Reference not found: {}", ref_name);
+                RSReference::Unresolved(ref_name.clone())
+            };
+            references.insert(new_ref.clone());
+            RSType::Reference(new_ref)
+        }
+        // Recursively resolve contained types for Vec and Option
+        RSType::Vec(inner) => RSType::Vec(Box::new(resolve_type(inner, types, references))),
+        RSType::Option(inner) => RSType::Option(Box::new(resolve_type(inner, types, references))),
+        RSType::Enum(RSEnum { option, variants }) => {
+            let variants = variants
+                .iter()
+                .map(|variant| resolve_type(variant, types, references))
+                .collect();
+            RSType::Enum(RSEnum {
+                option: *option,
+                variants,
+            })
+        }
+        RSType::Struct(RSStruct { fields }) => {
+            let fields = fields
+                .iter()
+                .map(|(field_name, field_type)| {
+                    (
+                        field_name.clone(),
+                        resolve_type(field_type, types, references),
+                    )
+                })
+                .collect();
+            RSType::Struct(RSStruct { fields })
+        }
+        RSType::EnumVariant(RSEnumVariant::RSType(inner)) => resolve_type(inner, types, references),
+        _ => rs_type.clone(),
     }
 }
 
@@ -72,8 +127,8 @@ fn extract_type_name<T: Serialize>(value: &T) -> String {
         .to_string()
 }
 
-fn unimplemented_variant<T: Serialize>(value: &T, span: Span, source: &str) -> EnumVariant {
-    EnumVariant::Unimplemented(
+fn unimplemented_variant<T: Serialize>(value: &T, span: Span, source: &str) -> RSEnumVariant {
+    RSEnumVariant::Unimplemented(
         extract_type_name(value),
         span.source_text(source).to_string(),
     )
@@ -114,17 +169,17 @@ fn make_rs_type(ts_type: &TSType, source: &str) -> RSType {
         TSType::TSIntersectionType(value) => unimplemented_type(value, value.span, source),
         TSType::TSLiteralType(literal) => {
             let variant = match &literal.literal {
-                TSLiteral::BooleanLiteral(boolean) => EnumVariant::BooleanLiteral(boolean.value),
-                TSLiteral::NullLiteral(_) => EnumVariant::NullLiteral,
+                TSLiteral::BooleanLiteral(boolean) => RSEnumVariant::BooleanLiteral(boolean.value),
+                TSLiteral::NullLiteral(_) => RSEnumVariant::NullLiteral,
                 TSLiteral::NumericLiteral(numeric) => {
-                    EnumVariant::NumericLiteral(numeric.raw.into())
+                    RSEnumVariant::NumericLiteral(numeric.raw.into())
                 }
                 TSLiteral::BigIntLiteral(bigint) => {
-                    EnumVariant::NumericLiteral(bigint.raw.clone().into_string())
+                    RSEnumVariant::NumericLiteral(bigint.raw.clone().into_string())
                 }
                 TSLiteral::RegExpLiteral(value) => unimplemented_variant(value, value.span, source),
                 TSLiteral::StringLiteral(string) => {
-                    EnumVariant::StringLiteral(string.value.clone().into_string())
+                    RSEnumVariant::StringLiteral(string.value.clone().into_string())
                 }
                 TSLiteral::TemplateLiteral(value) => {
                     unimplemented_variant(value, value.span, source)
@@ -140,7 +195,7 @@ fn make_rs_type(ts_type: &TSType, source: &str) -> RSType {
             // TODO: Make union type! Needs testing!
             let element_ts_type = named_tuple_member.element_type.to_ts_type();
             let element_type = make_rs_type(element_ts_type, source);
-            RSType::EnumVariant(EnumVariant::RSType(Box::new(element_type)))
+            RSType::EnumVariant(RSEnumVariant::RSType(Box::new(element_type)))
         }
         TSType::TSQualifiedName(value) => unimplemented_type(value, value.span, source),
         TSType::TSTemplateLiteralType(value) => unimplemented_type(value, value.span, source),
@@ -168,31 +223,10 @@ fn make_rs_type(ts_type: &TSType, source: &str) -> RSType {
         TSType::TSTypePredicate(value) => unimplemented_type(value, value.span, source),
         TSType::TSTypeQuery(value) => unimplemented_type(value, value.span, source),
         TSType::TSTypeReference(reference) => {
-            // TSType::TSTypeReference(tstyperef_type) => {
-            //     let type_name = tstyperef_type.type_name.to_string().capitalize();
-            //     if let Some(type_params) = &tstyperef_type.type_parameters {
-            //         if type_params.params.is_empty() {
-            //             return type_name;
-            //         }
-            //         let params = type_params
-            //             .params
-            //             .iter()
-            //             .map(|p| p.rs_type(unions))
-            //             .join(", ");
-            //         return format!("{}<{}>", type_name, params);
-            //     }
-            //     type_name
-            // }
             if let Some(params) = &reference.type_parameters {
-                // let variants: Vec<RSType> = params
-                //     .params
-                //     .iter()
-                //     .map(|t| make_rs_type(t, source))
-                //     .collect();
-
                 return make_union_or_option_type(&make_rs_types(params.params.iter(), source));
             }
-            RSType::Reference(reference.type_name.to_string())
+            RSType::Reference(RSReference::Unresolved(reference.type_name.to_string()))
         }
         TSType::TSUnionType(union) => {
             make_union_or_option_type(&make_rs_types(union.types.iter(), source))
@@ -211,7 +245,7 @@ fn make_rs_types<'a>(types: impl Iterator<Item = &'a TSType<'a>>, source: &str) 
 }
 
 fn make_union_or_option_type(types: &[RSType]) -> RSType {
-    println!("make_union_or_option_type {:#?}", types);
+    // println!("make_union_or_option_type {:#?}", types);
     let mut option = false;
     let variants: Vec<RSType> = types
         .iter()
@@ -220,7 +254,7 @@ fn make_union_or_option_type(types: &[RSType]) -> RSType {
                 option = true;
                 None
             }
-            RSType::EnumVariant(EnumVariant::NullLiteral) => {
+            RSType::EnumVariant(RSEnumVariant::NullLiteral) => {
                 option = true;
                 None
             }
@@ -232,16 +266,42 @@ fn make_union_or_option_type(types: &[RSType]) -> RSType {
 }
 
 impl<'a> Visit<'a> for TypeScriptToRustVisitor {
+    fn visit_import_declaration(
+        &mut self,
+        import_declaration: &oxc_ast::ast::ImportDeclaration<'a>,
+    ) {
+        if let Some(specifiers) = &import_declaration.specifiers {
+            for specifier in specifiers {
+                if let ImportDeclarationSpecifier::ImportSpecifier(spec) = specifier {
+                    let imported_name = spec.imported.name().into_string();
+                    let local_name = spec.local.name.clone().into_string();
+                    let module_source = import_declaration.source.value.clone().into_string();
+                    println!(
+                        "Found import: {} as {} from {}",
+                        imported_name, local_name, module_source
+                    );
+                }
+
+                // // Resolve the module path and parse the file where this module is declared
+                // let module_path = resolve_module_path(module_source);
+                // if let Some(module_path) = module_path {
+                //     // Recursively visit the imported file to find the interface
+                //     visit_imported_module(&module_path);
+                // }
+            }
+        }
+    }
+
     fn visit_ts_type_alias_declaration(&mut self, it: &oxc_ast::ast::TSTypeAliasDeclaration<'a>) {
         let type_name = it.id.name.to_string();
         let rs_type = make_rs_type(&it.type_annotation, &self.source_text);
-        println!("\nTYPE: {}: {:#?}", type_name, rs_type);
+        // println!("\nTYPE: {}: {:#?}", type_name, rs_type);
         self.type_map.insert(type_name, rs_type);
     }
 
     fn visit_ts_interface_declaration(&mut self, it: &oxc_ast::ast::TSInterfaceDeclaration<'a>) {
         let interface_name = it.id.name.to_string();
-        println!("\nINTERFACE: {}", &interface_name);
+        // println!("\nINTERFACE: {}", &interface_name);
         let mut fields: HashMap<String, RSType> = HashMap::new();
         for member in &it.body.body {
             let TSSignature::TSPropertySignature(property) = member else {
@@ -266,14 +326,27 @@ impl<'a> Visit<'a> for TypeScriptToRustVisitor {
                     false => rs_type,
                 },
             };
-            println!(
-                "  {}{}: {:?}",
-                field_name,
-                if property.optional { "?" } else { "" },
-                &rs_type
-            );
+
+            // println!(
+            //     "  {}{}: {:?}",
+            //     field_name,
+            //     if property.optional { "?" } else { "" },
+            //     &rs_type
+            // );
+
+            if self.ignore_unimplemented {
+                if let RSType::Unimplemented(_, _) = rs_type {
+                    continue;
+                }
+            }
+
             fields.insert(field_name.to_string(), rs_type);
         }
+
+        if fields.is_empty() {
+            return;
+        }
+
         self.type_map
             .insert(interface_name, RSType::Struct(RSStruct { fields }));
     }

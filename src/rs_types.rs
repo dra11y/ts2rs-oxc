@@ -14,6 +14,7 @@ pub(crate) enum RSPrimitive {
 }
 
 impl RSPrimitive {
+    #[allow(unused)]
     pub(crate) fn name(&self) -> String {
         match self {
             RSPrimitive::String => "String".to_string(),
@@ -37,7 +38,7 @@ pub(crate) struct RSStruct {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub(crate) enum EnumVariant {
+pub(crate) enum RSEnumVariant {
     RSType(Box<RSType>),
     StringLiteral(String),
     BooleanLiteral(bool),
@@ -46,19 +47,19 @@ pub(crate) enum EnumVariant {
     Unimplemented(String, String),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub(crate) struct RSField {
-    pub(crate) option: bool,
-    pub(crate) r#type: RSType,
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub(crate) enum RSReference {
+    Unresolved(String),
+    Resolved(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub(crate) enum RSType {
     Primitive(RSPrimitive),
-    Reference(String),
+    Reference(RSReference),
     Enum(RSEnum),
     Struct(RSStruct),
-    EnumVariant(EnumVariant),
+    EnumVariant(RSEnumVariant),
     Vec(Box<RSType>),
     Option(Box<RSType>),
     JSONValue,
@@ -68,10 +69,11 @@ pub(crate) enum RSType {
 }
 
 impl RSType {
+    #[allow(unused)]
     pub(crate) fn name(&self) -> String {
         match self {
             RSType::Primitive(p) => p.name(),
-            RSType::Reference(r) => format!("REF<{}>", r),
+            RSType::Reference(r) => format!("REF<{:?}>", r),
             RSType::Enum(e) => format!("{:?}", e),
             RSType::Struct(s) => format!("{:?}", s),
             RSType::EnumVariant(v) => format!("{:?}", v),

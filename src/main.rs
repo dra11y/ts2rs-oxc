@@ -19,7 +19,7 @@ fn main() -> Result<(), String> {
         .subcommand()
         .ok()
         .flatten()
-        .unwrap_or_else(|| String::from("examples/axe.d.ts"));
+        .unwrap_or_else(|| String::from("examples/axe-types.ts"));
 
     let path = Path::new(&name);
     let source_text = fs::read_to_string(path).map_err(|_| format!("Not found: '{name}'"))?;
@@ -37,9 +37,13 @@ fn main() -> Result<(), String> {
     let mut visitor = TypeScriptToRustVisitor::new(source_text.clone());
     visitor.visit_program(&ret.program);
 
-    resolve_references(&mut visitor.type_map);
+    let references = resolve_references(&mut visitor.type_map);
 
     println!("RESOLVED:\n\n{:#?}", visitor.type_map);
+    println!("REFERENCES:\n\n");
+    for reference in references {
+        println!("{:?}", reference);
+    }
 
     Ok(())
 }
