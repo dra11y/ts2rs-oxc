@@ -13,8 +13,21 @@ pub(crate) enum RSPrimitive {
     F64,
 }
 
+impl RSPrimitive {
+    pub(crate) fn name(&self) -> String {
+        match self {
+            RSPrimitive::String => "String".to_string(),
+            RSPrimitive::I32 => "i32".to_string(),
+            RSPrimitive::I128 => "i128".to_string(),
+            RSPrimitive::Bool => "bool".to_string(),
+            RSPrimitive::F64 => "f64".to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub(crate) struct RSEnum {
+    pub(crate) option: bool,
     pub(crate) variants: Vec<RSType>,
 }
 
@@ -34,14 +47,40 @@ pub(crate) enum EnumVariant {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) struct RSField {
+    pub(crate) option: bool,
+    pub(crate) r#type: RSType,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub(crate) enum RSType {
-    Primitive(bool, RSPrimitive),
-    Reference(bool, String),
-    Enum(bool, RSEnum),
-    Struct(bool, RSStruct),
-    EnumVariant(bool, EnumVariant),
-    Vec(bool, Box<RSType>),
-    JSONValue(bool),
-    Unit(bool),
+    Primitive(RSPrimitive),
+    Reference(String),
+    Enum(RSEnum),
+    Struct(RSStruct),
+    EnumVariant(EnumVariant),
+    Vec(Box<RSType>),
+    Option(Box<RSType>),
+    JSONValue,
+    NullOrUndefined,
+    Unit,
     Unimplemented(String, String),
+}
+
+impl RSType {
+    pub(crate) fn name(&self) -> String {
+        match self {
+            RSType::Primitive(p) => p.name(),
+            RSType::Reference(r) => format!("REF<{}>", r),
+            RSType::Enum(e) => format!("{:?}", e),
+            RSType::Struct(s) => format!("{:?}", s),
+            RSType::EnumVariant(v) => format!("{:?}", v),
+            RSType::Vec(v) => format!("Vec<{}>", v.name()),
+            RSType::Option(o) => format!("Option<{}>", o.name()),
+            RSType::JSONValue => "serde_json::Value".to_string(),
+            RSType::NullOrUndefined => "Option<()>".to_string(),
+            RSType::Unit => "()".to_string(),
+            RSType::Unimplemented(t, n) => format!("Unimplemented<{}, {}>", t, n),
+        }
+    }
 }

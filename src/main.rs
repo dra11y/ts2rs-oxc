@@ -37,9 +37,9 @@ fn main() -> Result<(), String> {
     let mut visitor = TypeScriptToRustVisitor::new(source_text.clone());
     visitor.visit_program(&ret.program);
 
-    resolve_references(&mut visitor.types);
+    resolve_references(&mut visitor.type_map);
 
-    println!("RESOLVED:\n\n{:#?}", visitor.types);
+    println!("RESOLVED:\n\n{:#?}", visitor.type_map);
 
     Ok(())
 }
