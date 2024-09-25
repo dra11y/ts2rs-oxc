@@ -1,11 +1,26 @@
 use std::{
     collections::HashSet,
     hash::{Hash, Hasher},
+    ops::{Deref, DerefMut},
 };
 
 // Define a wrapper around HashSet that implements Hash and Eq
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct HashableSet<T>(HashSet<T>);
+
+impl<T> Deref for HashableSet<T> {
+    type Target = HashSet<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> DerefMut for HashableSet<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
 impl<T: Eq + Hash + Ord> HashableSet<T> {
     #[allow(unused)]

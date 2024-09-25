@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -49,8 +49,14 @@ pub(crate) enum RSEnumVariant {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub(crate) enum RSReference {
-    Unresolved(String),
-    Resolved(String),
+    Unresolved {
+        name: String,
+        module_specifier: Option<String>,
+    },
+    Resolved {
+        name: String,
+        module_path: PathBuf,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

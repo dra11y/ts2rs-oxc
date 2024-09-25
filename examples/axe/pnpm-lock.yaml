@@ -1,0 +1,23 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      axe-core:
+        specifier: ^4.10.0
+        version: 4.10.0
+
+packages:
+
+  axe-core@4.10.0:
+    resolution: {integrity: sha512-Mr2ZakwQ7XUAjp7pAwQWRhhK8mQQ6JAaNWSjmjxil0R8BPioMtQsTLOolGYkji1rcL++3dCqZA3zWqpT+9Ew6g==}
+    engines: {node: '>=4'}
+
+snapshots:
+
+  axe-core@4.10.0: {}
