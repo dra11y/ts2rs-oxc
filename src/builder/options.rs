@@ -1,6 +1,6 @@
 use lazy_static::lazy_static;
 use oxc_parser::ParseOptions;
-use oxc_resolver::ResolveOptions;
+use oxc_resolver::{EnforceExtension, ResolveOptions};
 
 lazy_static! {
     static ref DEFAULT_PARSE_OPTIONS: ParseOptions = ParseOptions {
@@ -9,7 +9,9 @@ lazy_static! {
         ..ParseOptions::default()
     };
     static ref DEFAULT_RESOLVE_OPTIONS: ResolveOptions = ResolveOptions {
-        extensions: vec![".d.ts".into(), ".ts".into()],
+        extensions: vec![".d.ts".into(), ".ts".into(), "".into()],
+        main_fields: vec!["types".into(), "typings".into()],
+        enforce_extension: EnforceExtension::Enabled,
         ..ResolveOptions::default()
     };
 }

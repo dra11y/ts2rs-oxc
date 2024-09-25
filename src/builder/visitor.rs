@@ -41,17 +41,25 @@ pub struct TypeMapping {
 }
 
 pub(crate) struct TypeScriptToRustVisitor {
+    /// The path to the current module.
     pub(super) path: PathBuf,
+    /// The resolver used to resolve import/export specifiers in this module.
     pub(super) resolver: Resolver,
+    /// The codegen scope used to generate Rust code.
     pub(super) scope: codegen::Scope,
+    /// The type map used to store the types defined in this module.
     pub(super) types: RSTypeMap,
+    /// The type mappings used to store the types imported/exported from other modules.
     pub(super) type_mappings: HashMap<String, TypeMapping>,
+    /// The source text of the current module (for debugging unimplemented types).
     pub(super) source_text: String,
+    /// The options used to configure the TypeScript to Rust conversion.
     pub(super) options: TypeScriptOptions,
 }
 
 impl TypeScriptToRustVisitor {
     pub(super) fn resolve_module(&mut self, specifier: &str) -> PathBuf {
+        println!("resolve_module: {:?}", specifier);
         let current_dir = self
             .path
             .parent()

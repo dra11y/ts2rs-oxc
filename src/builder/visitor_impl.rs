@@ -29,8 +29,8 @@ impl<'a> Visit<'a> for TypeScriptToRustVisitor {
                         let local_name = spec.local.name.clone().into_string();
 
                         println!(
-                            "import {} as {} from {:?}",
-                            imported_name, local_name, &module_specifier
+                            "import ({:?}) {} as {} from {:?}",
+                            spec.import_kind, imported_name, local_name, &module_specifier
                         );
 
                         (OriginalName::Named(imported_name), local_name)

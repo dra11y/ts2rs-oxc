@@ -38,9 +38,13 @@ use visitor::TypeScriptToRustVisitor;
 
 use crate::rs_types::{RSType, RSTypeMap};
 
+/// The TypeScript to Rust builder that keeps track of
+/// the TypeScript modules and their types across modules.
 #[derive(Debug, Default)]
 pub(crate) struct TypeScriptToRustBuilder {
+    /// The options used to configure the TypeScript to Rust conversion.
     options: TypeScriptOptions,
+    /// The TypeScript modules and their types.
     modules: HashMap<PathBuf, RSTypeMap>,
 }
 
@@ -52,6 +56,7 @@ impl TypeScriptToRustBuilder {
         }
     }
 
+    /// Visits a TypeScript module and its dependencies.
     pub fn visit_module<R: AsRef<Path>>(&mut self, path: R) -> Result<(), Box<dyn Error>> {
         let path = path.as_ref().canonicalize()?;
 
@@ -87,10 +92,16 @@ impl TypeScriptToRustBuilder {
         let mut type_map = self.modules.get_mut(&path).unwrap();
         *type_map = visitor.types.clone();
 
-        // // Recursively visit imported modules
-        // for imported_module in visitor.get_imported_modules() {
-        //     self.visit_module(&imported_module)?;
-        // }
+        // Resolve dependencies
+        for mapping in visitor.type_mappings.values() {
+            if let Some(original_module_path) = &mapping.original_module {
+                // Recursively visit the original module
+                self.visit_module(original_module_path)?;
+            }
+        }
+
+        // After all modules have been visited, resolve type references
+        // self.resolve_type_references(&path)?;
 
         Ok(())
     }
