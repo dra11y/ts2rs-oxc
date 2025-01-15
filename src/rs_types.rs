@@ -2,10 +2,10 @@ use std::{collections::HashMap, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-pub(crate) type RSTypeMap = HashMap<String, RSType>;
+// pub type RSTypeMap = HashMap<String, RSType>;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub(crate) enum RSPrimitive {
+pub enum RSPrimitive {
     String,
     I32,
     I128,
@@ -15,7 +15,7 @@ pub(crate) enum RSPrimitive {
 
 impl RSPrimitive {
     #[allow(unused)]
-    pub(crate) fn name(&self) -> String {
+    pub fn name(&self) -> String {
         match self {
             RSPrimitive::String => "String".to_string(),
             RSPrimitive::I32 => "i32".to_string(),
@@ -27,18 +27,18 @@ impl RSPrimitive {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub(crate) struct RSEnum {
-    pub(crate) option: bool,
-    pub(crate) variants: Vec<RSType>,
+pub struct RSEnum {
+    pub option: bool,
+    pub variants: Vec<RSType>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub(crate) struct RSStruct {
-    pub(crate) fields: HashMap<String, RSType>,
+pub struct RSStruct {
+    pub fields: HashMap<String, RSType>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub(crate) enum RSEnumVariant {
+pub enum RSEnumVariant {
     RSType(Box<RSType>),
     StringLiteral(String),
     BooleanLiteral(bool),
@@ -48,7 +48,7 @@ pub(crate) enum RSEnumVariant {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub(crate) enum RSReference {
+pub enum RSReference {
     Unresolved {
         name: String,
         module_specifier: Option<String>,
@@ -60,7 +60,7 @@ pub(crate) enum RSReference {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub(crate) enum RSType {
+pub enum RSType {
     Primitive(RSPrimitive),
     Reference(RSReference),
     Enum(RSEnum),
@@ -75,8 +75,7 @@ pub(crate) enum RSType {
 }
 
 impl RSType {
-    #[allow(unused)]
-    pub(crate) fn name(&self) -> String {
+    pub fn name(&self) -> String {
         match self {
             RSType::Primitive(p) => p.name(),
             RSType::Reference(r) => format!("REF<{:?}>", r),

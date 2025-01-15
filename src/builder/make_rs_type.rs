@@ -6,7 +6,7 @@ use serde::Serialize;
 
 use crate::rs_types::*;
 
-pub(crate) fn make_rs_type(
+pub fn make_rs_type(
     ts_type: &TSType,
     source: &str,
     // imported_types: &HashMap<String, (PathBuf, String)>,
@@ -40,9 +40,13 @@ pub(crate) fn make_rs_type(
             let variant = match &literal.literal {
                 TSLiteral::BooleanLiteral(boolean) => RSEnumVariant::BooleanLiteral(boolean.value),
                 TSLiteral::NullLiteral(_) => RSEnumVariant::NullLiteral,
-                TSLiteral::NumericLiteral(numeric) => {
-                    RSEnumVariant::NumericLiteral(numeric.raw.into())
-                }
+                TSLiteral::NumericLiteral(numeric) => RSEnumVariant::NumericLiteral(
+                    numeric
+                        .raw
+                        .clone()
+                        .expect("make_rs_type from TSLiteral::NumericLiteral")
+                        .into(),
+                ),
                 TSLiteral::BigIntLiteral(bigint) => {
                     RSEnumVariant::NumericLiteral(bigint.raw.clone().into_string())
                 }
@@ -92,10 +96,10 @@ pub(crate) fn make_rs_type(
         TSType::TSTypePredicate(value) => unimplemented_type(value, value.span, source),
         TSType::TSTypeQuery(value) => unimplemented_type(value, value.span, source),
         TSType::TSTypeReference(reference) => {
-            println!("TSType::TSTypeReference {:#?}", reference);
             if let Some(params) = &reference.type_parameters {
                 return make_union_or_option_type(&make_rs_types(params.params.iter(), source));
             }
+            // Create an unresolved reference to the type
             RSType::Reference(RSReference::Unresolved {
                 name: reference.type_name.to_string(),
                 module_specifier: None,
@@ -149,7 +153,7 @@ fn extract_type_name<T: Serialize>(value: &T) -> String {
     type_name_of_val(value)
         .split("::")
         .last()
-        .unwrap()
+        .expect("extract_type_name")
         .replace('>', "")
         .to_string()
 }

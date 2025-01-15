@@ -4,20 +4,32 @@ use crate::rs_types::*;
 
 use super::TypeScriptToRustVisitor;
 
-pub(crate) trait ReferenceResolver {
+pub trait ReferenceResolver {
     fn resolve_references(&mut self) -> HashSet<RSReference>;
 }
 
-impl ReferenceResolver for TypeScriptToRustVisitor {
+impl ReferenceResolver for TypeScriptToRustVisitor<'_> {
     fn resolve_references(&mut self) -> HashSet<RSReference> {
+        // self.types.iter().map(|(k, v)| {
+        //     let resolved_type = resolve_type(&rs_type, &self.types, &mut references);
+        //     if let Some(mut_ref_type) = self.types.get_mut(&name) {
+        //         *mut_ref_type = resolved_type;
+        //     }
+        // }).collect();
+
         let keys: Vec<_> = self.types.keys().cloned().collect();
         println!("resolve_references: KEYS: {:#?}", keys);
 
         let mut references: HashSet<RSReference> = HashSet::new();
 
         for name in keys {
+            println!("name: {name}");
             if let Some(rs_type) = self.types.get(&name).cloned() {
+                println!("rs_type: {rs_type:?}");
+
                 let resolved_type = resolve_type(&rs_type, &self.types, &mut references);
+                println!("resolved_type: {resolved_type:?}");
+
                 if let Some(mut_ref_type) = self.types.get_mut(&name) {
                     *mut_ref_type = resolved_type;
                 }
@@ -28,9 +40,9 @@ impl ReferenceResolver for TypeScriptToRustVisitor {
     }
 }
 
-fn resolve_type(
+pub(crate) fn resolve_type(
     rs_type: &RSType,
-    type_map: &RSTypeMap,
+    type_map: &HashMap<String, RSType>,
     references: &mut HashSet<RSReference>,
 ) -> RSType {
     match rs_type {

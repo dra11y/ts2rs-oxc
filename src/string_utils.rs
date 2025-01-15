@@ -1,5 +1,5 @@
 #[allow(unused)]
-pub(crate) trait StringUtils {
+pub trait StringUtils {
     fn capitalize(&self) -> String;
 
     fn to_ascii(&self) -> String;

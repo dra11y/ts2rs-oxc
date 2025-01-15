@@ -2,9 +2,9 @@ use std::collections::{HashMap, HashSet};
 
 use convert_case::{Case, Casing};
 use oxc_ast::{
-    ast::{self, StringLiteral},
-    visit::walk,
     Visit,
+    ast::{self, Expression, IdentifierReference, StringLiteral, TSType, TSTypeName},
+    visit::walk,
 };
 use oxc_span::{Atom, Span};
 use oxc_syntax::scope::ScopeFlags;
@@ -16,11 +16,20 @@ use crate::{
     string_utils::StringUtils,
 };
 
-use super::{make_rs_type, TypeScriptToRustVisitor};
+use super::{TypeScriptToRustVisitor, make_rs_type};
 
-impl<'a> Visit<'a> for TypeScriptToRustVisitor {
+impl<'a> Visit<'a> for TypeScriptToRustVisitor<'a> {
     fn visit_import_declaration(&mut self, it: &ast::ImportDeclaration<'a>) {
-        let module_specifier = self.resolve_module(&it.source.value);
+        let module_specifier = it.source.value.to_string();
+        let module_path = self
+            .resolver
+            .resolve(
+                self.path.parent().expect("get current dir"),
+                &module_specifier,
+            )
+            .expect("resolve module");
+        let module_path = module_path.full_path();
+
         if let Some(specs) = &it.specifiers {
             for spec in specs {
                 let (imported_name, local_name) = match spec {
@@ -33,7 +42,7 @@ impl<'a> Visit<'a> for TypeScriptToRustVisitor {
                             spec.import_kind, imported_name, local_name, &module_specifier
                         );
 
-                        (OriginalName::Named(imported_name), local_name)
+                        (OriginalName::Name(imported_name), local_name)
                     }
                     ast::ImportDeclarationSpecifier::ImportDefaultSpecifier(spec) => {
                         let local_name = spec.local.name.clone().into_string();
@@ -52,7 +61,9 @@ impl<'a> Visit<'a> for TypeScriptToRustVisitor {
                 };
 
                 let mapping = TypeMapping {
-                    original_module: Some(module_specifier.clone()),
+                    original_module: Some(
+                        module_specifier.parse().expect("invalid module specifier"),
+                    ),
                     original_name: imported_name,
                     local_name: local_name.clone(),
                     public_name: local_name.clone(),
@@ -77,7 +88,7 @@ impl<'a> Visit<'a> for TypeScriptToRustVisitor {
 
             let mapping = TypeMapping {
                 original_module: module_specifier,
-                original_name: OriginalName::Named(local_name.clone()),
+                original_name: OriginalName::Name(local_name.clone()),
                 local_name: local_name.clone(),
                 public_name: exported_name,
             };
@@ -97,8 +108,25 @@ impl<'a> Visit<'a> for TypeScriptToRustVisitor {
 
     fn visit_ts_interface_declaration(&mut self, it: &ast::TSInterfaceDeclaration<'a>) {
         let interface_name = it.id.name.to_string();
-        println!("\nINTERFACE: {}", &interface_name);
+        // println!("\nINTERFACE: {}", &interface_name);
         let mut fields: HashMap<String, RSType> = HashMap::new();
+
+        // Handle extended interfaces
+        if let Some(extends) = &it.extends {
+            println!("{interface_name} extends:");
+            for heritage in extends {
+                // Convert Expression to TSType using existing helper
+                let ts_type = Self::expression_to_ts_type(&heritage.expression, self.allocator);
+                let rs_type = Self::ts_type_to_rs_type(&ts_type, &self.source_text);
+                println!("HERITAGE base_type: {:?}", rs_type);
+
+                if let RSType::Struct(base_struct) = rs_type {
+                    fields.extend(base_struct.fields);
+                }
+            }
+        }
+
+        // Add interface's own fields
         for member in &it.body.body {
             let ast::TSSignature::TSPropertySignature(property) = member else {
                 continue;

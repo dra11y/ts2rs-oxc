@@ -17,7 +17,7 @@ lazy_static! {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct TypeScriptOptions {
+pub struct TypeScriptOptions {
     pub ignore_unimplemented: bool,
     pub parse_options: ParseOptions,
     pub resolve_options: ResolveOptions,

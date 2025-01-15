@@ -16,8 +16,8 @@ use lazy_static::lazy_static;
 use options::TypeScriptOptions;
 use oxc_allocator::Allocator;
 use oxc_ast::{
-    ast::{self, Program},
     Visit,
+    ast::{self, Program, TSType},
 };
 use oxc_diagnostics::OxcDiagnostic;
 use oxc_parser::{ParseOptions, Parser, ParserReturn};
@@ -25,7 +25,7 @@ use oxc_span::SourceType;
 
 mod errors;
 mod make_rs_type;
-pub(crate) mod options;
+pub mod options;
 mod reference_resolver;
 mod visitor;
 mod visitor_impl;
@@ -36,16 +36,23 @@ use make_rs_type::*;
 use reference_resolver::ReferenceResolver;
 use visitor::TypeScriptToRustVisitor;
 
-use crate::rs_types::{RSType, RSTypeMap};
+use crate::rs_types::{RSReference, RSType};
+use reference_resolver::resolve_type;
+
+#[derive(Debug)]
+pub enum ConversionError {
+    UnsupportedType(String),
+}
 
 /// The TypeScript to Rust builder that keeps track of
 /// the TypeScript modules and their types across modules.
-#[derive(Debug, Default)]
-pub(crate) struct TypeScriptToRustBuilder {
+#[derive(Default)]
+pub struct TypeScriptToRustBuilder {
     /// The options used to configure the TypeScript to Rust conversion.
     options: TypeScriptOptions,
     /// The TypeScript modules and their types.
-    modules: HashMap<PathBuf, RSTypeMap>,
+    modules: HashMap<PathBuf, HashMap<String, RSType>>,
+    allocator: Allocator,
 }
 
 impl TypeScriptToRustBuilder {
@@ -65,7 +72,7 @@ impl TypeScriptToRustBuilder {
             return Ok(());
         }
 
-        self.modules.insert(path.clone(), RSTypeMap::new());
+        self.modules.insert(path.clone(), HashMap::new());
 
         println!("visit_module: {:?}", path);
 
@@ -84,6 +91,7 @@ impl TypeScriptToRustBuilder {
             resolver,
             source_text.clone(),
             self.options.clone(),
+            &self.allocator,
         );
 
         visitor.visit_program(&ret.program);
@@ -104,5 +112,87 @@ impl TypeScriptToRustBuilder {
         // self.resolve_type_references(&path)?;
 
         Ok(())
+    }
+
+    pub fn get_types(&self) -> &HashMap<PathBuf, HashMap<String, RSType>> {
+        &self.modules
+    }
+
+    pub fn resolve_references(&mut self) {
+        let mut references: HashSet<RSReference> = HashSet::new();
+
+        for (module_path, types) in self.modules.iter_mut() {
+            for (_type_name, rs_type) in types.iter_mut() {
+                let resolved_type = resolve_type(rs_type, types, &mut references);
+                *rs_type = resolved_type;
+            }
+        }
+    }
+
+    /// Resolves module specifiers to absolute paths.
+    fn resolve_module(&self, specifier: &str) -> PathBuf {
+        // Implementation for resolving module paths
+        // This could use the resolver from `TypeScriptToRustVisitor` or another mechanism
+        PathBuf::from(specifier) // Placeholder implementation
+    }
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub struct TypeId {
+    module_path: PathBuf,
+    name: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct TypeReference<'a> {
+    type_id: TypeId,
+    type_parameters: Vec<&'a TSType<'a>>,
+}
+
+#[derive(Debug)]
+pub struct TypeRegistry<'a> {
+    types: HashMap<TypeId, RSType>,
+    unresolved_references: HashMap<TypeId, Vec<TypeReference<'a>>>,
+}
+
+impl<'a> TypeRegistry<'a> {
+    pub fn convert_type(
+        &mut self,
+        ts_type: &'a TSType<'a>,
+        current_module: &Path,
+    ) -> Result<RSType, ConversionError> {
+        match ts_type {
+            TSType::TSTypeReference(reference) => {
+                let type_id = TypeId {
+                    module_path: current_module.to_path_buf(),
+                    name: reference.type_name.to_string(),
+                };
+
+                if let Some(resolved) = self.types.get(&type_id) {
+                    Ok(resolved.clone())
+                } else {
+                    let type_ref = TypeReference {
+                        type_id: type_id.clone(),
+                        type_parameters: reference
+                            .type_parameters
+                            .as_ref()
+                            .map(|params| params.params.iter().collect())
+                            .unwrap_or_default(),
+                    };
+
+                    self.unresolved_references
+                        .entry(type_id.clone())
+                        .or_default()
+                        .push(type_ref.clone());
+
+                    Ok(RSType::Reference(RSReference::Unresolved {
+                        name: type_id.name,
+                        module_specifier: Some(type_id.module_path.to_string_lossy().into()),
+                    }))
+                }
+            }
+            // ... other type conversions ...
+            _ => Err(ConversionError::UnsupportedType(format!("{:?}", ts_type))),
+        }
     }
 }

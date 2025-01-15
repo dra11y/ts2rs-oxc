@@ -5,11 +5,13 @@ use std::{
 };
 
 use codegen::Scope;
+use oxc_allocator::{Allocator, CloneIn};
+use oxc_ast::ast::{Expression, TSAnyKeyword, TSType, TSTypeName, TSTypeReference};
 use oxc_resolver::Resolver;
 
-use crate::{hashable_set::HashableSet, rs_types::RSTypeMap};
+use crate::{hashable_set::HashableSet, rs_types::RSType};
 
-use super::options::TypeScriptOptions;
+use super::{make_rs_type, options::TypeScriptOptions};
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum OriginalName {
@@ -18,7 +20,7 @@ pub enum OriginalName {
     /// export { OriginalName }
     /// export { OriginalName as renamed }
     /// export { OriginalName as renamed } from "source"
-    Named(String),
+    Name(String),
     /// import local from "source"
     Default,
     /// import * as local from "source"
@@ -40,37 +42,43 @@ pub struct TypeMapping {
     pub public_name: String,
 }
 
-pub(crate) struct TypeScriptToRustVisitor {
+pub struct TypeScriptToRustVisitor<'a> {
     /// The path to the current module.
-    pub(super) path: PathBuf,
+    pub path: PathBuf,
     /// The resolver used to resolve import/export specifiers in this module.
-    pub(super) resolver: Resolver,
+    pub resolver: Resolver,
     /// The codegen scope used to generate Rust code.
-    pub(super) scope: codegen::Scope,
+    pub scope: codegen::Scope,
     /// The type map used to store the types defined in this module.
-    pub(super) types: RSTypeMap,
+    pub types: HashMap<String, RSType>,
     /// The type mappings used to store the types imported/exported from other modules.
-    pub(super) type_mappings: HashMap<String, TypeMapping>,
+    pub type_mappings: HashMap<String, TypeMapping>,
     /// The source text of the current module (for debugging unimplemented types).
-    pub(super) source_text: String,
+    pub source_text: String,
     /// The options used to configure the TypeScript to Rust conversion.
-    pub(super) options: TypeScriptOptions,
+    pub options: TypeScriptOptions,
+    pub(crate) allocator: &'a Allocator,
+    _phantom: std::marker::PhantomData<&'a ()>,
 }
 
-impl TypeScriptToRustVisitor {
-    pub(super) fn resolve_module(&mut self, specifier: &str) -> PathBuf {
+impl<'a> TypeScriptToRustVisitor<'a> {
+    pub fn resolve_module(&mut self, specifier: &str) -> PathBuf {
         println!("resolve_module: {:?}", specifier);
-        let current_dir = self
-            .path
-            .parent()
-            .expect("Failed to get current module directory");
+        let current_dir = self.path.parent().expect("get current module directory");
         let resolution = self
             .resolver
             .resolve(current_dir, specifier)
-            .unwrap_or_else(|_| {
+            .unwrap_or_else(|error| {
+                let note = match error {
+                    oxc_resolver::ResolveError::NotFound(_) |
+                    oxc_resolver::ResolveError::MatchedAliasNotFound(_, _) |
+                    oxc_resolver::ResolveError::PackageImportNotDefined(_, _) => {
+                        "\n\nDid you run npm install in the source folder?\n\n"
+                    },
+                    _ => "",
+                };
                 panic!(
-                    "Failed to resolve module specifier: {} from path: {:?}",
-                    specifier, current_dir
+                    "ERROR: {error:?} in resolve_module(specifier: \"{specifier}\")\nfrom path: {current_dir:?}{note}"
                 )
             });
         resolution.full_path()
@@ -81,27 +89,39 @@ impl TypeScriptToRustVisitor {
         resolver: Resolver,
         source_text: String,
         options: TypeScriptOptions,
+        allocator: &'a Allocator,
     ) -> Self {
         Self {
             path,
             resolver,
             options,
             source_text,
-            ..Self::default()
+            allocator,
+            scope: Scope::new(),
+            types: HashMap::new(),
+            type_mappings: HashMap::new(),
+            _phantom: std::marker::PhantomData,
         }
     }
-}
 
-impl Default for TypeScriptToRustVisitor {
-    fn default() -> Self {
-        Self {
-            path: PathBuf::default(),
-            resolver: Resolver::default(),
-            scope: Scope::new(),
-            types: RSTypeMap::default(),
-            type_mappings: HashMap::default(),
-            source_text: String::default(),
-            options: TypeScriptOptions::default(),
+    pub(crate) fn expression_to_ts_type(
+        expr: &Expression<'a>,
+        allocator: &'a Allocator,
+    ) -> TSType<'a> {
+        match expr {
+            Expression::Identifier(ident) => TSType::TSTypeReference(oxc_allocator::Box::new_in(
+                TSTypeReference {
+                    type_name: TSTypeName::IdentifierReference(ident.clone_in(allocator)),
+                    type_parameters: None,
+                    span: ident.span,
+                },
+                allocator,
+            )),
+            _ => todo!(),
         }
+    }
+
+    pub(crate) fn ts_type_to_rs_type(ts_type: &TSType<'_>, source_text: &str) -> RSType {
+        make_rs_type(ts_type, source_text)
     }
 }
