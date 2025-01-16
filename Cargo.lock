@@ -930,6 +930,7 @@ dependencies = [
  "oxc_diagnostics",
  "oxc_parser",
  "oxc_resolver",
+ "oxc_semantic",
  "oxc_span",
  "oxc_syntax",
  "pico-args",

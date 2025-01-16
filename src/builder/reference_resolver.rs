@@ -17,20 +17,20 @@ impl ReferenceResolver for TypeScriptToRustVisitor<'_> {
         //     }
         // }).collect();
 
-        let keys: Vec<_> = self.types.keys().cloned().collect();
+        let keys: Vec<_> = self.local_types.keys().cloned().collect();
         println!("resolve_references: KEYS: {:#?}", keys);
 
         let mut references: HashSet<RSReference> = HashSet::new();
 
         for name in keys {
             println!("name: {name}");
-            if let Some(rs_type) = self.types.get(&name).cloned() {
+            if let Some(rs_type) = self.local_types.get(&name).cloned() {
                 println!("rs_type: {rs_type:?}");
 
-                let resolved_type = resolve_type(&rs_type, &self.types, &mut references);
+                let resolved_type = resolve_type(&rs_type, &self.local_types, &mut references);
                 println!("resolved_type: {resolved_type:?}");
 
-                if let Some(mut_ref_type) = self.types.get_mut(&name) {
+                if let Some(mut_ref_type) = self.local_types.get_mut(&name) {
                     *mut_ref_type = resolved_type;
                 }
             }
@@ -52,15 +52,12 @@ pub(crate) fn resolve_type(
         RSType::Option(inner) => {
             RSType::Option(Box::new(resolve_type(inner, type_map, references)))
         }
-        RSType::Enum(RSEnum { option, variants }) => {
+        RSType::Enum(RSEnum { variants }) => {
             let variants = variants
                 .iter()
                 .map(|variant| resolve_type(variant, type_map, references))
                 .collect();
-            RSType::Enum(RSEnum {
-                option: *option,
-                variants,
-            })
+            RSType::Enum(RSEnum { variants })
         }
         RSType::Struct(RSStruct { fields }) => {
             let fields = fields

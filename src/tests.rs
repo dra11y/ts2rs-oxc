@@ -152,7 +152,9 @@ fn test_generate_axe_types() {
                     let variants = &enum_type.variants;
                     match &variants[0] {
                         RSType::Reference(ref_type) => match ref_type {
-                            RSReference::Unresolved { name, .. } => assert_eq!(name, "RunOnly"),
+                            RSReference::Unresolved {
+                                local_name: name, ..
+                            } => assert_eq!(name, "RunOnly"),
                             RSReference::Resolved { name, .. } => assert_eq!(name, "RunOnly"),
                         },
                         _ => panic!("First variant should be RunOnly reference"),
@@ -161,7 +163,9 @@ fn test_generate_axe_types() {
                     match &variants[1] {
                         RSType::Vec(inner) => match &**inner {
                             RSType::Reference(ref_type) => match ref_type {
-                                RSReference::Unresolved { name, .. } => {
+                                RSReference::Unresolved {
+                                    local_name: name, ..
+                                } => {
                                     assert_eq!(name, "TagValue")
                                 }
                                 RSReference::Resolved { name, .. } => assert_eq!(name, "TagValue"),
@@ -194,7 +198,9 @@ fn test_generate_axe_types() {
         match rules {
             RSType::Option(inner) => match &**inner {
                 RSType::Reference(ref_type) => match ref_type {
-                    RSReference::Unresolved { name, .. } => assert_eq!(name, "RuleObject"),
+                    RSReference::Unresolved {
+                        local_name: name, ..
+                    } => assert_eq!(name, "RuleObject"),
                     RSReference::Resolved { name, .. } => assert_eq!(name, "RuleObject"),
                 },
                 _ => panic!("rules should be RuleObject"),
@@ -211,7 +217,9 @@ fn test_generate_axe_types() {
             RSType::Option(inner) => match &**inner {
                 RSType::Vec(array_type) => match &**array_type {
                     RSType::Reference(ref_type) => match ref_type {
-                        RSReference::Unresolved { name, .. } => assert_eq!(name, "resultGroups"),
+                        RSReference::Unresolved {
+                            local_name: name, ..
+                        } => assert_eq!(name, "resultGroups"),
                         RSReference::Resolved { name, .. } => assert_eq!(name, "resultGroups"),
                     },
                     _ => panic!("resultTypes should contain resultGroups enum"),
@@ -261,7 +269,9 @@ fn test_generate_axe_types() {
         match passes {
             RSType::Vec(array_type) => match &**array_type {
                 RSType::Reference(ref_type) => match ref_type {
-                    RSReference::Unresolved { name, .. } => assert_eq!(name, "Result"),
+                    RSReference::Unresolved {
+                        local_name: name, ..
+                    } => assert_eq!(name, "Result"),
                     RSReference::Resolved { name, .. } => assert_eq!(name, "Result"),
                 },
                 _ => panic!("passes should contain Result type"),
@@ -277,7 +287,9 @@ fn test_generate_axe_types() {
         match violations {
             RSType::Vec(array_type) => match &**array_type {
                 RSType::Reference(ref_type) => match ref_type {
-                    RSReference::Unresolved { name, .. } => assert_eq!(name, "Result"),
+                    RSReference::Unresolved {
+                        local_name: name, ..
+                    } => assert_eq!(name, "Result"),
                     RSReference::Resolved { name, .. } => assert_eq!(name, "Result"),
                 },
                 _ => panic!("violations should contain Result type"),

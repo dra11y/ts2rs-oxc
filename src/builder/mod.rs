@@ -21,6 +21,7 @@ use oxc_ast::{
 };
 use oxc_diagnostics::OxcDiagnostic;
 use oxc_parser::{ParseOptions, Parser, ParserReturn};
+use oxc_semantic::{SemanticBuilder, Stats};
 use oxc_span::SourceType;
 
 mod errors;
@@ -30,13 +31,16 @@ mod reference_resolver;
 mod visitor;
 mod visitor_impl;
 
-use oxc_resolver::{ResolveOptions, Resolver};
+use oxc_resolver::{ResolveContext, ResolveOptions, Resolver};
 
 use make_rs_type::*;
 use reference_resolver::ReferenceResolver;
 use visitor::TypeScriptToRustVisitor;
 
-use crate::rs_types::{RSReference, RSType};
+use crate::{
+    rs_types::{RSReference, RSType},
+    typescript_type_id::TypeScriptTypeId,
+};
 use reference_resolver::resolve_type;
 
 #[derive(Debug)]
@@ -50,8 +54,10 @@ pub enum ConversionError {
 pub struct TypeScriptToRustBuilder {
     /// The options used to configure the TypeScript to Rust conversion.
     options: TypeScriptOptions,
+    /// Visited modules
+    modules: HashSet<PathBuf>,
     /// The TypeScript modules and their types.
-    modules: HashMap<PathBuf, HashMap<String, RSType>>,
+    types: HashMap<TypeScriptTypeId, RSType>,
     allocator: Allocator,
 }
 
@@ -67,22 +73,29 @@ impl TypeScriptToRustBuilder {
     pub fn visit_module<R: AsRef<Path>>(&mut self, path: R) -> Result<(), Box<dyn Error>> {
         let path = path.as_ref().canonicalize()?;
 
-        // Skip module if already processed.
-        if self.modules.contains_key(&path) {
-            return Ok(());
-        }
+        // // Skip module if already processed.
+        // if self.types.contains_key(&path) {
+        //     return Ok(());
+        // }
 
-        self.modules.insert(path.clone(), HashMap::new());
+        // println!("visit_module: {:?}", path);
 
-        println!("visit_module: {:?}", path);
+        // self.types.insert(path.clone(), HashMap::new());
 
         // Read and parse the module
         let source_text = fs::read_to_string(&path)?;
         let source_type = SourceType::from_path(&path)?;
-        let allocator = Allocator::default();
-        let parser = Parser::new(&allocator, &source_text, source_type)
+        let parser = Parser::new(&self.allocator, &source_text, source_type)
             .with_options(self.options.parse_options);
         let ret = parser.parse();
+
+        // NOTHING USEFUL?
+        // let semantic = SemanticBuilder::new()
+        //     .with_cfg(false)
+        //     .with_build_jsdoc(false)
+        //     .with_check_syntax_error(false)
+        //     .with_scope_tree_child_ids(true)
+        //     .build(&ret.program);
 
         // Create and use the visitor
         let resolver = Resolver::new(self.options.resolve_options.clone());
@@ -97,16 +110,16 @@ impl TypeScriptToRustBuilder {
         visitor.visit_program(&ret.program);
 
         // Store the result
-        let mut type_map = self.modules.get_mut(&path).unwrap();
-        *type_map = visitor.types.clone();
+        // let mut type_map = self.types.get_mut(&path).unwrap();
+        // *type_map = visitor.types.clone();
 
-        // Resolve dependencies
-        for mapping in visitor.type_mappings.values() {
-            if let Some(original_module_path) = &mapping.original_module {
-                // Recursively visit the original module
-                self.visit_module(original_module_path)?;
-            }
-        }
+        // // Resolve dependencies
+        // for mapping in visitor.local_types.values() {
+        //     if let Some(original_module_path) = &mapping.original_module {
+        //         // Recursively visit the original module
+        //         self.visit_module(original_module_path)?;
+        //     }
+        // }
 
         // After all modules have been visited, resolve type references
         // self.resolve_type_references(&path)?;
@@ -114,20 +127,20 @@ impl TypeScriptToRustBuilder {
         Ok(())
     }
 
-    pub fn get_types(&self) -> &HashMap<PathBuf, HashMap<String, RSType>> {
-        &self.modules
-    }
+    // pub fn get_types(&self) -> &HashMap<PathBuf, HashMap<String, RSType>> {
+    //     &self.types
+    // }
 
-    pub fn resolve_references(&mut self) {
-        let mut references: HashSet<RSReference> = HashSet::new();
+    // pub fn resolve_references(&mut self) {
+    //     let mut references: HashSet<RSReference> = HashSet::new();
 
-        for (module_path, types) in self.modules.iter_mut() {
-            for (_type_name, rs_type) in types.iter_mut() {
-                let resolved_type = resolve_type(rs_type, types, &mut references);
-                *rs_type = resolved_type;
-            }
-        }
-    }
+    //     for (module_path, types) in self.modules.iter_mut() {
+    //         for (_type_name, rs_type) in types.iter_mut() {
+    //             let resolved_type = resolve_type(rs_type, types, &mut references);
+    //             *rs_type = resolved_type;
+    //         }
+    //     }
+    // }
 
     /// Resolves module specifiers to absolute paths.
     fn resolve_module(&self, specifier: &str) -> PathBuf {
@@ -185,10 +198,11 @@ impl<'a> TypeRegistry<'a> {
                         .or_default()
                         .push(type_ref.clone());
 
-                    Ok(RSType::Reference(RSReference::Unresolved {
-                        name: type_id.name,
-                        module_specifier: Some(type_id.module_path.to_string_lossy().into()),
-                    }))
+                    todo!()
+                    // Ok(RSType::Reference(RSReference::Unresolved {
+                    //     local_name: type_id.name,
+                    //     module_specifier: Some(type_id.module_path.to_string_lossy().into()),
+                    // }))
                 }
             }
             // ... other type conversions ...

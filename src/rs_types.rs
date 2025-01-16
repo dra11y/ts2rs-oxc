@@ -1,6 +1,7 @@
 use std::{collections::HashMap, path::PathBuf};
 
-use serde::{Deserialize, Serialize};
+use oxc_ast::ast::BigintBase;
+use serde::{Deserialize, Serialize, Serializer};
 
 // pub type RSTypeMap = HashMap<String, RSType>;
 
@@ -28,7 +29,6 @@ impl RSPrimitive {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RSEnum {
-    pub option: bool,
     pub variants: Vec<RSType>,
 }
 
@@ -40,34 +40,81 @@ pub struct RSStruct {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum RSEnumVariant {
     RSType(Box<RSType>),
+    BoolLiteral(bool),
+    NumericLiteral(f64, Option<String>),
+    BigIntLiteral(String, #[serde(with = "bigint_base")] BigintBase),
     StringLiteral(String),
-    BooleanLiteral(bool),
     NullLiteral,
-    NumericLiteral(String),
     Unimplemented(String, String),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub enum RSReference {
-    Unresolved {
-        name: String,
-        module_specifier: Option<String>,
-    },
-    Resolved {
-        name: String,
-        module_path: PathBuf,
-    },
+mod bigint_base {
+    use oxc_ast::ast::BigintBase;
+    use serde::{
+        Deserialize as _, Serializer,
+        de::{DeserializeOwned, Deserializer},
+    };
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<BigintBase, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(match s.as_str() {
+            "decimal" => BigintBase::Decimal,
+            "binary" => BigintBase::Binary,
+            "octal" => BigintBase::Octal,
+            "hex" => BigintBase::Hex,
+            _ => unreachable!(),
+        })
+    }
+
+    pub fn serialize<S>(x: &BigintBase, s: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        s.serialize_str(match x {
+            BigintBase::Decimal => "decimal",
+            BigintBase::Binary => "binary",
+            BigintBase::Octal => "octal",
+            BigintBase::Hex => "hex",
+        })
+    }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
+pub struct RSReference {
+    pub local_name: String,
+    pub original_name: String,
+    pub module: PathBuf,
+}
+
+// impl PartialEq for RSReference {
+//     fn eq(&self, other: &Self) -> bool {
+//         self.local_name == other.local_name
+//             && self.original_name == other.original_name
+//             && self.module == other.module
+//     }
+// }
+
+// impl std::hash::Hash for RSReference {
+//     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+//         self.local_name.hash(state);
+//         self.original_name.hash(state);
+//         self.module.hash(state);
+//     }
+// }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum RSType {
     Primitive(RSPrimitive),
     Reference(RSReference),
-    Enum(RSEnum),
     Struct(RSStruct),
+    Enum(RSEnum),
     EnumVariant(RSEnumVariant),
     Vec(Box<RSType>),
     Option(Box<RSType>),
+    ParameterizedType(Box<RSType>, Vec<RSType>),
     JSONValue,
     NullOrUndefined,
     Unit,
@@ -78,7 +125,7 @@ impl RSType {
     pub fn name(&self) -> String {
         match self {
             RSType::Primitive(p) => p.name(),
-            RSType::Reference(r) => format!("REF<{:?}>", r),
+            RSType::Reference(r) => format!("RSReference<{}>", r.local_name),
             RSType::Enum(e) => format!("{:?}", e),
             RSType::Struct(s) => format!("{:?}", s),
             RSType::EnumVariant(v) => format!("{:?}", v),
@@ -88,6 +135,7 @@ impl RSType {
             RSType::NullOrUndefined => "Option<()>".to_string(),
             RSType::Unit => "()".to_string(),
             RSType::Unimplemented(t, n) => format!("Unimplemented<{}, {}>", t, n),
+            RSType::ParameterizedType(base, params) => todo!(),
         }
     }
 }

@@ -16,6 +16,7 @@ oxc_codegen = "0.46.0"
 oxc_diagnostics = "0.46.0"
 oxc_parser = "0.46.0"
 oxc_resolver = "3.0.3"
+oxc_semantic = "0.46.0"
 oxc_span = { version = "0.46.0", features = ["serialize"] }
 oxc_syntax = "0.46.0"
 pico-args = "0.5.0"
