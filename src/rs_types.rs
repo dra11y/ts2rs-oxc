@@ -3,6 +3,8 @@ use std::{collections::HashMap, path::PathBuf};
 use oxc_ast::ast::BigintBase;
 use serde::{Deserialize, Serialize, Serializer};
 
+use crate::typescript_type_id::TypeScriptTypeId;
+
 // pub type RSTypeMap = HashMap<String, RSType>;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -90,10 +92,15 @@ mod bigint_base {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq)]
-pub struct RSReference {
-    pub local_name: String,
-    pub original_name: String,
-    pub module: PathBuf,
+pub enum RSReference {
+    Unresolved {
+        local_name: String,
+        original_name: String,
+        resolved_module: PathBuf,
+    },
+    Resolved {
+        id: TypeScriptTypeId,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -122,7 +129,7 @@ impl RSType {
     pub fn name(&self) -> String {
         match self {
             RSType::Primitive(p) => p.name(),
-            RSType::Reference(r) => format!("RSReference<{}>", r.local_name),
+            RSType::Reference(reference) => format!("{:?}", reference),
             RSType::Enum(e) => format!("{:?}", e),
             RSType::EnumVariant(v) => format!("{:?}", v),
             RSType::Struct(s) => format!("{:?}", s),

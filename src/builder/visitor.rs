@@ -61,8 +61,8 @@ pub struct TypeScriptToRustVisitor<'a> {
     pub path: PathBuf,
     /// The resolver used to resolve import/export specifiers in this module.
     pub resolver: Resolver,
-    /// The codegen scope used to generate Rust code.
-    pub scope: codegen::Scope,
+    // /// The codegen scope used to generate Rust code.
+    // pub scope: codegen::Scope,
     /// The types defined in this module (key = actual TS type name).
     /// Types that reference imports from other modules are of type:
     /// [`RSReference`] ([`RSType::Reference`]).
@@ -100,7 +100,7 @@ impl<'a> TypeScriptToRustVisitor<'a> {
     pub fn new(
         path: PathBuf,
         resolver: Resolver,
-        source_text: String,
+        source: String,
         options: TypeScriptOptions,
         allocator: &'a Allocator,
     ) -> Self {
@@ -108,9 +108,9 @@ impl<'a> TypeScriptToRustVisitor<'a> {
             path,
             resolver,
             options,
-            source: source_text,
+            source,
             allocator,
-            scope: Scope::new(),
+            // scope: Scope::new(),
             local_types: HashMap::new(),
             _phantom: std::marker::PhantomData,
         }
@@ -251,10 +251,10 @@ impl<'a> TypeScriptToRustVisitor<'a> {
             TSType::TSTypePredicate(value) => self.unimplemented_type(value, value.span),
             TSType::TSTypeQuery(value) => self.unimplemented_type(value, value.span),
             TSType::TSTypeReference(reference) => {
-                let base = RSType::Reference(RSReference {
+                let base = RSType::Reference(RSReference::Unresolved {
                     local_name: reference.type_name.to_string(),
                     original_name: reference.type_name.to_string(),
-                    module: self.path.clone(),
+                    resolved_module: self.path.clone(),
                 });
                 match &reference.type_parameters {
                     Some(params) => {

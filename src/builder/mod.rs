@@ -38,15 +38,10 @@ use reference_resolver::ReferenceResolver;
 use visitor::TypeScriptToRustVisitor;
 
 use crate::{
-    rs_types::{RSReference, RSType},
+    rs_types::{RSEnum, RSEnumVariant, RSReference, RSStruct, RSType},
     typescript_type_id::TypeScriptTypeId,
 };
 use reference_resolver::resolve_type;
-
-#[derive(Debug)]
-pub enum ConversionError {
-    UnsupportedType(String),
-}
 
 /// The TypeScript to Rust builder that keeps track of
 /// the TypeScript modules and their types across modules.
@@ -73,6 +68,8 @@ impl TypeScriptToRustBuilder {
         for entrypoint in &self.options.entrypoints.clone() {
             self.visit_module(entrypoint)?;
         }
+
+        self.resolve_references();
 
         Ok(())
     }
@@ -128,105 +125,85 @@ impl TypeScriptToRustBuilder {
             })
             .collect();
         self.types.extend(module_types);
-
-        // Store the result
-        // let mut type_map = self.types.get_mut(&path).unwrap();
-        // *type_map = visitor.types.clone();
-
-        // // Resolve dependencies
-        // for mapping in visitor.local_types.values() {
-        //     if let Some(original_module_path) = &mapping.original_module {
-        //         // Recursively visit the original module
-        //         self.visit_module(original_module_path)?;
-        //     }
-        // }
-
-        // After all modules have been visited, resolve type references
-        // self.resolve_type_references(&path)?;
-
         Ok(())
     }
 
-    // pub fn get_types(&self) -> &HashMap<PathBuf, HashMap<String, RSType>> {
-    //     &self.types
-    // }
+    fn resolve_references(&mut self) {
+        let keys: Vec<_> = self.types.keys().cloned().collect();
 
-    // pub fn resolve_references(&mut self) {
-    //     let mut references: HashSet<RSReference> = HashSet::new();
-
-    //     for (module_path, types) in self.modules.iter_mut() {
-    //         for (_type_name, rs_type) in types.iter_mut() {
-    //             let resolved_type = resolve_type(rs_type, types, &mut references);
-    //             *rs_type = resolved_type;
-    //         }
-    //     }
-    // }
-
-    /// Resolves module specifiers to absolute paths.
-    fn resolve_module(&self, specifier: &str) -> PathBuf {
-        // Implementation for resolving module paths
-        // This could use the resolver from `TypeScriptToRustVisitor` or another mechanism
-        PathBuf::from(specifier) // Placeholder implementation
-    }
-}
-
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
-pub struct TypeId {
-    module_path: PathBuf,
-    name: String,
-}
-
-#[derive(Debug, Clone)]
-pub struct TypeReference<'a> {
-    type_id: TypeId,
-    type_parameters: Vec<&'a TSType<'a>>,
-}
-
-#[derive(Debug)]
-pub struct TypeRegistry<'a> {
-    types: HashMap<TypeId, RSType>,
-    unresolved_references: HashMap<TypeId, Vec<TypeReference<'a>>>,
-}
-
-impl<'a> TypeRegistry<'a> {
-    pub fn convert_type(
-        &mut self,
-        ts_type: &'a TSType<'a>,
-        current_module: &Path,
-    ) -> Result<RSType, ConversionError> {
-        match ts_type {
-            TSType::TSTypeReference(reference) => {
-                let type_id = TypeId {
-                    module_path: current_module.to_path_buf(),
-                    name: reference.type_name.to_string(),
-                };
-
-                if let Some(resolved) = self.types.get(&type_id) {
-                    Ok(resolved.clone())
-                } else {
-                    let type_ref = TypeReference {
-                        type_id: type_id.clone(),
-                        type_parameters: reference
-                            .type_parameters
-                            .as_ref()
-                            .map(|params| params.params.iter().collect())
-                            .unwrap_or_default(),
-                    };
-
-                    self.unresolved_references
-                        .entry(type_id.clone())
-                        .or_default()
-                        .push(type_ref.clone());
-
-                    todo!()
-                    // Ok(RSType::Reference(RSReference::Unresolved {
-                    //     local_name: type_id.name,
-                    //     module_specifier: Some(type_id.module_path.to_string_lossy().into()),
-                    // }))
+        for id in keys {
+            if let Some(rs_type) = self.types.get(&id).cloned() {
+                let resolved_type = self.resolve_type(&rs_type);
+                if rs_type != resolved_type {
+                    if let Some(mut_ref_type) = self.types.get_mut(&id) {
+                        *mut_ref_type = resolved_type;
+                    }
                 }
             }
-            // ... other type conversions ...
-            _ => Err(ConversionError::UnsupportedType(format!("{:?}", ts_type))),
+        }
+    }
+
+    #[allow(clippy::only_used_in_recursion)]
+    fn resolve_type(&self, rs_type: &RSType) -> RSType {
+        match rs_type {
+            RSType::Reference(reference) => match reference {
+                RSReference::Resolved { .. } => rs_type.clone(),
+                RSReference::Unresolved {
+                    local_name,
+                    original_name,
+                    resolved_module,
+                } => {
+                    let id = TypeScriptTypeId {
+                        module: resolved_module.clone(),
+                        name: original_name.clone(),
+                    };
+                    let resolved_type = self.types.get(&id);
+
+                    match resolved_type {
+                        Some(rs_type) => RSType::Reference(RSReference::Resolved { id }),
+                        None => {
+                            //
+                            panic!(
+                                "Failed to resolve reference: {reference:#?} \n\n{:#?}",
+                                self.types
+                            )
+                        }
+                    }
+                }
+            },
+            RSType::Vec(inner) => RSType::Vec(Box::new(self.resolve_type(inner))),
+            RSType::Option(inner) => RSType::Option(Box::new(self.resolve_type(inner))),
+            RSType::Enum(RSEnum { variants }) => {
+                let variants = variants
+                    .iter()
+                    .map(|variant| self.resolve_type(variant))
+                    .collect();
+                RSType::Enum(RSEnum { variants })
+            }
+            RSType::Struct(RSStruct { fields }) => {
+                let fields = fields
+                    .iter()
+                    .map(|(field_name, field_type)| {
+                        (field_name.clone(), self.resolve_type(field_type))
+                    })
+                    .collect();
+                RSType::Struct(RSStruct { fields })
+            }
+            RSType::EnumVariant(variant) => rs_type.clone(),
+            // RSType::EnumVariant(variant) => {
+            //     panic!("Unexpected in resolve_type: RSType::EnumVariant({variant:#?})")
+            // }
+            RSType::Primitive(_) => rs_type.clone(),
+            RSType::Tuple(vec) => todo!(),
+            RSType::ParameterizedType(rstype, vec) => {
+                let resolved_type = self.resolve_type(rstype);
+                let resolved_params = vec.iter().map(|inner| self.resolve_type(inner)).collect();
+                RSType::ParameterizedType(Box::new(resolved_type), resolved_params)
+            }
+            RSType::JSONValue => rs_type.clone(),
+            RSType::NullOrUndefined => rs_type.clone(),
+            RSType::Unit => rs_type.clone(),
+            RSType::Unimplemented(_, _) => rs_type.clone(),
         }
     }
 }

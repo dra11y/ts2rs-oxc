@@ -65,9 +65,6 @@ pub(crate) fn resolve_type(
                 .collect();
             RSType::Struct(RSStruct { fields })
         }
-        RSType::EnumVariant(RSEnumVariant::RSType(inner)) => {
-            resolve_type(inner, type_map, references)
-        }
         _ => rs_type.clone(),
     }
 }

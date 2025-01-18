@@ -54,10 +54,10 @@ impl<'a> Visit<'a> for TypeScriptToRustVisitor<'a> {
 
             self.local_types.insert(
                 local_name.clone(),
-                RSType::Reference(RSReference {
+                RSType::Reference(RSReference::Unresolved {
                     local_name,
                     original_name: imported_name,
-                    module: module.clone(),
+                    resolved_module: module.clone(),
                 }),
             );
         }
@@ -77,10 +77,10 @@ impl<'a> Visit<'a> for TypeScriptToRustVisitor<'a> {
 
             self.local_types.insert(
                 exported_name.clone(),
-                RSType::Reference(RSReference {
+                RSType::Reference(RSReference::Unresolved {
                     original_name: local_name.clone(),
                     local_name,
-                    module: module.clone(),
+                    resolved_module: module.clone(),
                 }),
             );
         }

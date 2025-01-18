@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
-#[derive(Debug, Eq, PartialEq, Hash)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct TypeScriptTypeId {
     pub module: PathBuf,
     pub name: String,
