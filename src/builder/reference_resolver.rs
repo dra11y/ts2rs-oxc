@@ -18,18 +18,12 @@ impl ReferenceResolver for TypeScriptToRustVisitor<'_> {
         // }).collect();
 
         let keys: Vec<_> = self.local_types.keys().cloned().collect();
-        println!("resolve_references: KEYS: {:#?}", keys);
 
         let mut references: HashSet<RSReference> = HashSet::new();
 
         for name in keys {
-            println!("name: {name}");
             if let Some(rs_type) = self.local_types.get(&name).cloned() {
-                println!("rs_type: {rs_type:?}");
-
                 let resolved_type = resolve_type(&rs_type, &self.local_types, &mut references);
-                println!("resolved_type: {resolved_type:?}");
-
                 if let Some(mut_ref_type) = self.local_types.get_mut(&name) {
                     *mut_ref_type = resolved_type;
                 }

@@ -53,11 +53,11 @@ pub enum ConversionError {
 #[derive(Default)]
 pub struct TypeScriptToRustBuilder {
     /// The options used to configure the TypeScript to Rust conversion.
-    options: TypeScriptOptions,
+    pub options: TypeScriptOptions,
     /// Visited modules
-    modules: HashSet<PathBuf>,
+    pub modules: HashSet<PathBuf>,
     /// The TypeScript modules and their types.
-    types: HashMap<TypeScriptTypeId, RSType>,
+    pub types: HashMap<TypeScriptTypeId, RSType>,
     allocator: Allocator,
 }
 
@@ -69,18 +69,24 @@ impl TypeScriptToRustBuilder {
         }
     }
 
+    pub fn visit_entrypoints(&mut self) -> Result<(), Box<dyn Error>> {
+        for entrypoint in &self.options.entrypoints.clone() {
+            self.visit_module(entrypoint)?;
+        }
+
+        Ok(())
+    }
+
     /// Visits a TypeScript module and its dependencies.
-    pub fn visit_module<R: AsRef<Path>>(&mut self, path: R) -> Result<(), Box<dyn Error>> {
+    fn visit_module<R: AsRef<Path>>(&mut self, path: R) -> Result<(), Box<dyn Error>> {
         let path = path.as_ref().canonicalize()?;
 
-        // // Skip module if already processed.
-        // if self.types.contains_key(&path) {
-        //     return Ok(());
-        // }
+        // Skip module if already processed.
+        if self.modules.contains(&path) {
+            return Ok(());
+        }
 
-        // println!("visit_module: {:?}", path);
-
-        // self.types.insert(path.clone(), HashMap::new());
+        self.modules.insert(path.clone());
 
         // Read and parse the module
         let source_text = fs::read_to_string(&path)?;
@@ -89,7 +95,7 @@ impl TypeScriptToRustBuilder {
             .with_options(self.options.parse_options);
         let ret = parser.parse();
 
-        // NOTHING USEFUL?
+        // NOTHING USEFUL IN SEMANTICS?
         // let semantic = SemanticBuilder::new()
         //     .with_cfg(false)
         //     .with_build_jsdoc(false)
@@ -108,6 +114,20 @@ impl TypeScriptToRustBuilder {
         );
 
         visitor.visit_program(&ret.program);
+        let module_types: HashMap<TypeScriptTypeId, RSType> = visitor
+            .local_types
+            .iter()
+            .map(|t| {
+                (
+                    TypeScriptTypeId {
+                        module: path.clone(),
+                        name: t.0.clone(),
+                    },
+                    t.1.clone(),
+                )
+            })
+            .collect();
+        self.types.extend(module_types);
 
         // Store the result
         // let mut type_map = self.types.get_mut(&path).unwrap();

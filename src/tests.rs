@@ -1,6 +1,9 @@
 #![cfg(test)]
 use crate::{
-    builder::{TypeScriptToRustBuilder, options::TypeScriptOptions},
+    builder::{
+        TypeScriptToRustBuilder,
+        options::{TypeScriptOptions, TypeScriptOptionsBuilder},
+    },
     rs_types::{RSPrimitive, RSReference, RSType},
 };
 use serde_json::json;
@@ -80,11 +83,13 @@ fn test_generate_axe_types() {
     let canonical_path = entrypoint
         .canonicalize()
         .expect("Failed to canonicalize path");
-    let options = TypeScriptOptions::default();
+    let options = TypeScriptOptionsBuilder::default()
+        .entrypoints(vec![entrypoint])
+        .build()
+        .expect("options");
     let mut builder = TypeScriptToRustBuilder::new(options);
-
-    builder.visit_module(&entrypoint);
-    let types = builder.get_types();
+    builder.visit_entrypoints();
+    // let types = builder.get_types();
 
     // Get the axe.d.ts module path
     let axe_dts_path = PathBuf::from("examples/axe/node_modules/axe-core/axe.d.ts")
@@ -353,7 +358,7 @@ fn test_run_only_variants() {
     let options = TypeScriptOptions::default();
     let mut builder = TypeScriptToRustBuilder::new(options);
 
-    builder.visit_module(&entrypoint);
+    // builder.visit_module(&entrypoint);
 
     for (json, description) in test_cases {
         // TODO: Once implemented, test each variant:

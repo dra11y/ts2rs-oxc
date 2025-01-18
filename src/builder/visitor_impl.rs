@@ -37,17 +37,11 @@ impl<'a> Visit<'a> for TypeScriptToRustVisitor<'a> {
 
                     // TODO: buggy: spec.import_kind doesn't resolve to [`ImportOrExportKind::Type`]
 
-                    println!(
-                        "import ({:?}) {} as {} from {:?}",
-                        spec.import_kind, imported_name, local_name, &it.source.value
-                    );
-
                     (imported_name, local_name)
                 }
                 ast::ImportDeclarationSpecifier::ImportDefaultSpecifier(spec) => {
                     todo!("handle ImportDefaultSpecifier");
                     // let local_name = spec.local.name.clone().into_string();
-                    // println!("import {} from {:?}", local_name, &module_specifier);
                     // (local_name, local_name)
                 }
                 ast::ImportDeclarationSpecifier::ImportNamespaceSpecifier(spec) => {
@@ -81,11 +75,6 @@ impl<'a> Visit<'a> for TypeScriptToRustVisitor<'a> {
                 .map(|s| self.resolve_module(&s.value))
                 .unwrap_or_else(|| self.path.clone());
 
-            println!(
-                "export {} as {} from {:?}",
-                exported_name, local_name, &module
-            );
-
             self.local_types.insert(
                 exported_name.clone(),
                 RSType::Reference(RSReference {
@@ -102,23 +91,19 @@ impl<'a> Visit<'a> for TypeScriptToRustVisitor<'a> {
     fn visit_ts_type_alias_declaration(&mut self, it: &ast::TSTypeAliasDeclaration<'a>) {
         let type_name = it.id.name.to_string();
         let rs_type = self.make_rs_type(&it.type_annotation);
-        // println!("\nTYPE: {}: {:#?}", type_name, rs_type);
         self.local_types.insert(type_name, rs_type);
     }
 
     fn visit_ts_interface_declaration(&mut self, it: &ast::TSInterfaceDeclaration<'a>) {
         let interface_name = it.id.name.to_string();
-        // println!("\nINTERFACE: {}", &interface_name);
         let mut fields: HashMap<String, RSType> = HashMap::new();
 
         // Handle extended interfaces
         if let Some(extends) = &it.extends {
-            println!("{interface_name} extends:");
             for heritage in extends {
                 // Convert Expression to TSType using existing helper
                 let ts_type = Self::expression_to_ts_type(&heritage.expression, self.allocator);
                 let rs_type = self.make_rs_type(&ts_type);
-                println!("rs_type: {}", rs_type.name());
 
                 if let RSType::Struct(base_struct) = rs_type {
                     fields.extend(base_struct.fields);

@@ -7,14 +7,17 @@ use std::{
 
 use codegen::Scope;
 use oxc_allocator::{Allocator, CloneIn};
-use oxc_ast::ast::{Expression, TSAnyKeyword, TSLiteral, TSType, TSTypeName, TSTypeReference};
+use oxc_ast::ast::{
+    Expression, TSAnyKeyword, TSLiteral, TSOptionalType, TSTupleElement, TSType, TSTypeName,
+    TSTypeReference,
+};
 use oxc_resolver::Resolver;
 use oxc_span::Span;
 use serde::Serialize;
 
 use crate::{
     hashable_set::HashableSet,
-    rs_types::{RSEnum, RSEnumVariant, RSPrimitive, RSReference, RSType},
+    rs_types::{RSEnum, RSEnumVariant, RSPrimitive, RSReference, RSTupleElement, RSType},
 };
 
 use super::{make_rs_type, options::TypeScriptOptions};
@@ -74,7 +77,6 @@ pub struct TypeScriptToRustVisitor<'a> {
 
 impl<'a> TypeScriptToRustVisitor<'a> {
     pub fn resolve_module(&mut self, specifier: &str) -> PathBuf {
-        println!("resolve_module: {:?}", specifier);
         let current_dir = self.path.parent().expect("get current module directory");
         let resolution = self
             .resolver
@@ -129,6 +131,15 @@ impl<'a> TypeScriptToRustVisitor<'a> {
             )),
             _ => todo!(),
         }
+    }
+
+    pub fn line_number(&self, span: Span) -> usize {
+        self.source
+            .chars()
+            .take(span.start as usize)
+            .collect::<String>()
+            .lines()
+            .count()
     }
 
     pub fn make_rs_type(
@@ -199,16 +210,41 @@ impl<'a> TypeScriptToRustVisitor<'a> {
             TSType::TSTemplateLiteralType(value) => self.unimplemented_type(value, value.span),
             TSType::TSThisType(value) => self.unimplemented_type(value, value.span),
             TSType::TSTupleType(tuple) => {
-                let types = tuple
+                let elements = tuple
                     .element_types
                     .iter()
-                    .filter_map(|t| self.make_rs_type(t.as_ts_type()))
-                    .collect::<Vec<RSType>>();
-                RSType::Vec(Box::new(self.make_union_or_option_type(&types)))
+                    .map(|et| {
+                        let ts_type = match et {
+                            // oxc panics on `to_ts_type()` for [`TSTupleElement::TSRestType`]
+                            TSTupleElement::TSRestType(tsrest_type) => {
+                                tsrest_type.type_annotation.clone_in(self.allocator)
+                            }
+                            _ => et.to_ts_type().clone_in(self.allocator),
+                        };
+                        let rs_type = Box::new(self.make_rs_type(&ts_type));
+                        match et {
+                            TSTupleElement::TSOptionalType(ts_type) => {
+                                RSTupleElement::OptionalType(rs_type)
+                            }
+                            TSTupleElement::TSRestType(rest) => RSTupleElement::RestType(rs_type),
+                            _ => RSTupleElement::Type(rs_type), //RSTupleElement::Type(ts_type),
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                RSType::Tuple(elements)
             }
             TSType::TSTypeLiteral(lit) => {
-                // unimplemented!("TSTypeLiteral: {:#?}", literal)
-                // e.g. { [key: string]: string }
+                // e.g. { [key: string]: string } or:
+                // type ReplyHandler = (
+                //     message: any | Error,
+                //     keepalive: boolean,
+                //     responder: Responder
+                // ) => void
+                // type Responder = (
+                //     message: any | Error,
+                //     keepalive?: boolean,
+                //     replyHandler?: ReplyHandler
+                // ) => void
                 RSType::JSONValue
             }
             TSType::TSTypeOperatorType(value) => self.unimplemented_type(value, value.span),
@@ -220,19 +256,12 @@ impl<'a> TypeScriptToRustVisitor<'a> {
                     original_name: reference.type_name.to_string(),
                     module: self.path.clone(),
                 });
-                println!(
-                    "------------------------\nTSTypeReference: base: {:#?}",
-                    base
-                );
                 match &reference.type_parameters {
                     Some(params) => {
                         let params = params
                             .params
                             .iter()
-                            .map(|ts_type| {
-                                println!("param: {:#?}", self.make_rs_type(ts_type));
-                                self.make_rs_type(ts_type)
-                            })
+                            .map(|ts_type| self.make_rs_type(ts_type))
                             .collect::<Vec<_>>();
                         RSType::ParameterizedType(Box::new(base), params)
                     }
@@ -267,7 +296,6 @@ impl<'a> TypeScriptToRustVisitor<'a> {
     }
 
     fn make_union_or_option_type(&self, types: &[RSType]) -> RSType {
-        // println!("make_union_or_option_type {:#?}", types);
         let mut option = false;
         let variants: Vec<RSType> = types
             .iter()

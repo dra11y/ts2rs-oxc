@@ -8,6 +8,7 @@ edition = "2024"
 [dependencies]
 codegen = "0.2.0"
 convert_case = "0.7.1"
+derive_builder = "0.20.2"
 itertools = "0.14.0"
 lazy_static = "1.5.0"
 oxc_allocator = { version = "0.46.0", features = ["serialize"] }

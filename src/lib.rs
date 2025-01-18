@@ -6,7 +6,10 @@ use std::{
     str::FromStr,
 };
 
-use builder::{TypeScriptToRustBuilder, options::TypeScriptOptions};
+use builder::{
+    TypeScriptToRustBuilder,
+    options::{TypeScriptOptions, TypeScriptOptionsBuilder},
+};
 use oxc_allocator::Allocator;
 use oxc_ast::Visit;
 use oxc_parser::{ParseOptions, Parser};
@@ -26,9 +29,14 @@ pub fn run() -> Result<(), String> {
     // let entrypoint = PathBuf::from_str("examples/axe/axe-types.ts").expect("path");
     let entrypoint =
         PathBuf::from_str("examples/axe/node_modules/axe-core/axe.d.ts").expect("path");
-    let options = TypeScriptOptions::default();
+    let options = TypeScriptOptionsBuilder::default()
+        .entrypoints(vec![entrypoint])
+        .build()
+        .expect("options");
     let mut builder = TypeScriptToRustBuilder::new(options);
-    builder.visit_module(&entrypoint);
+    builder.visit_entrypoints();
+
+    println!("TYPES:\n{:#?}", builder.types);
     // builder.resolve_references();
 
     // let references = resolve_references(&mut visitor.type_map);

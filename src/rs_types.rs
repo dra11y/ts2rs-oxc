@@ -27,10 +27,10 @@ impl RSPrimitive {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct RSEnum {
-    pub variants: Vec<RSType>,
-}
+// #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+// pub struct RSEnum {
+//     pub variants: Vec<RSType>,
+// }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RSStruct {
@@ -46,6 +46,13 @@ pub enum RSEnumVariant {
     StringLiteral(String),
     NullLiteral,
     Unimplemented(String, String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum RSTupleElement {
+    Type(Box<RSType>),
+    OptionalType(Box<RSType>),
+    RestType(Box<RSType>),
 }
 
 mod bigint_base {
@@ -89,21 +96,10 @@ pub struct RSReference {
     pub module: PathBuf,
 }
 
-// impl PartialEq for RSReference {
-//     fn eq(&self, other: &Self) -> bool {
-//         self.local_name == other.local_name
-//             && self.original_name == other.original_name
-//             && self.module == other.module
-//     }
-// }
-
-// impl std::hash::Hash for RSReference {
-//     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-//         self.local_name.hash(state);
-//         self.original_name.hash(state);
-//         self.module.hash(state);
-//     }
-// }
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RSEnum {
+    pub variants: Vec<RSType>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum RSType {
@@ -112,6 +108,7 @@ pub enum RSType {
     Struct(RSStruct),
     Enum(RSEnum),
     EnumVariant(RSEnumVariant),
+    Tuple(Vec<RSTupleElement>),
     Vec(Box<RSType>),
     Option(Box<RSType>),
     ParameterizedType(Box<RSType>, Vec<RSType>),
@@ -127,8 +124,9 @@ impl RSType {
             RSType::Primitive(p) => p.name(),
             RSType::Reference(r) => format!("RSReference<{}>", r.local_name),
             RSType::Enum(e) => format!("{:?}", e),
-            RSType::Struct(s) => format!("{:?}", s),
             RSType::EnumVariant(v) => format!("{:?}", v),
+            RSType::Struct(s) => format!("{:?}", s),
+            RSType::Tuple(t) => format!("{:?}", t),
             RSType::Vec(v) => format!("Vec<{}>", v.name()),
             RSType::Option(o) => format!("Option<{}>", o.name()),
             RSType::JSONValue => "serde_json::Value".to_string(),
