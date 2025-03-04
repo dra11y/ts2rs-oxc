@@ -11,7 +11,7 @@ use builder::{
     options::{TypeScriptOptions, TypeScriptOptionsBuilder},
 };
 use oxc_allocator::Allocator;
-use oxc_ast::Visit;
+use oxc_ast_visit::Visit;
 use oxc_parser::{ParseOptions, Parser};
 use oxc_resolver::{ResolveOptions, Resolver};
 use oxc_semantic::SemanticBuilder;

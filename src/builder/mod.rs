@@ -15,10 +15,8 @@ use itertools::Itertools;
 use lazy_static::lazy_static;
 use options::TypeScriptOptions;
 use oxc_allocator::Allocator;
-use oxc_ast::{
-    Visit,
-    ast::{self, Program, TSType},
-};
+use oxc_ast::ast::{self, Program, TSType};
+use oxc_ast_visit::Visit as _;
 use oxc_diagnostics::OxcDiagnostic;
 use oxc_parser::{ParseOptions, Parser, ParserReturn};
 use oxc_semantic::{SemanticBuilder, Stats};

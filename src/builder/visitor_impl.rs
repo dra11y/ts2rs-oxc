@@ -1,15 +1,12 @@
 use std::collections::{HashMap, HashSet};
 
 use convert_case::{Case, Casing};
-use oxc_ast::{
-    Visit,
-    ast::{
-        self, Expression, IdentifierReference, ImportDeclarationSpecifier, ImportDefaultSpecifier,
-        ImportNamespaceSpecifier, ImportOrExportKind, ImportSpecifier, ModuleExportName,
-        StringLiteral, TSType, TSTypeName,
-    },
-    visit::walk,
+use oxc_ast::ast::{
+    self, Expression, IdentifierReference, ImportDeclarationSpecifier, ImportDefaultSpecifier,
+    ImportNamespaceSpecifier, ImportOrExportKind, ImportSpecifier, ModuleExportName, StringLiteral,
+    TSType, TSTypeName,
 };
+use oxc_ast_visit::{Visit, walk};
 use oxc_span::{Atom, Span};
 use oxc_syntax::scope::ScopeFlags;
 

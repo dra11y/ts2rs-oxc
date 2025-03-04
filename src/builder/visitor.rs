@@ -176,16 +176,12 @@ impl<'a> TypeScriptToRustVisitor<'a> {
             TSType::TSLiteralType(literal) => {
                 let variant = match &literal.literal {
                     TSLiteral::BooleanLiteral(boolean) => RSEnumVariant::BoolLiteral(boolean.value),
-                    TSLiteral::NullLiteral(_) => RSEnumVariant::NullLiteral,
                     TSLiteral::NumericLiteral(numeric) => RSEnumVariant::NumericLiteral(
                         numeric.value,
                         numeric.raw.clone().map(|r| r.to_string()),
                     ),
                     TSLiteral::BigIntLiteral(bigint) => {
                         RSEnumVariant::BigIntLiteral(bigint.raw.to_string(), bigint.base)
-                    }
-                    TSLiteral::RegExpLiteral(value) => {
-                        self.unimplemented_variant(value, value.span)
                     }
                     TSLiteral::StringLiteral(string) => {
                         RSEnumVariant::StringLiteral(string.value.to_string())
@@ -206,7 +202,6 @@ impl<'a> TypeScriptToRustVisitor<'a> {
                 let element_type = self.make_rs_type(element_ts_type);
                 RSType::EnumVariant(RSEnumVariant::RSType(Box::new(element_type)))
             }
-            TSType::TSQualifiedName(value) => self.unimplemented_type(value, value.span),
             TSType::TSTemplateLiteralType(value) => self.unimplemented_type(value, value.span),
             TSType::TSThisType(value) => self.unimplemented_type(value, value.span),
             TSType::TSTupleType(tuple) => {
@@ -320,14 +315,14 @@ impl<'a> TypeScriptToRustVisitor<'a> {
         }
     }
 
-    fn unimplemented_variant<T: Serialize>(&self, value: &T, span: Span) -> RSEnumVariant {
+    fn unimplemented_variant<T: std::fmt::Debug>(&self, value: &T, span: Span) -> RSEnumVariant {
         RSEnumVariant::Unimplemented(
             self.extract_type_name(value),
             span.source_text(&self.source).to_string(),
         )
     }
 
-    fn extract_type_name<T: Serialize>(&self, value: &T) -> String {
+    fn extract_type_name<T: std::fmt::Debug>(&self, value: &T) -> String {
         type_name_of_val(value)
             .split("::")
             .last()
@@ -336,7 +331,7 @@ impl<'a> TypeScriptToRustVisitor<'a> {
             .to_string()
     }
 
-    fn unimplemented_type<T: Serialize>(&self, value: &T, span: Span) -> RSType {
+    fn unimplemented_type<T: std::fmt::Debug>(&self, value: &T, span: Span) -> RSType {
         RSType::Unimplemented(
             self.extract_type_name(value),
             span.source_text(&self.source).to_string(),

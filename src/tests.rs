@@ -5,6 +5,7 @@ use crate::{
         options::{TypeScriptOptions, TypeScriptOptionsBuilder},
     },
     rs_types::{RSPrimitive, RSReference, RSType},
+    typescript_type_id::TypeScriptTypeId,
 };
 use serde_json::json;
 use std::path::PathBuf;
@@ -89,18 +90,19 @@ fn test_generate_axe_types() {
         .expect("options");
     let mut builder = TypeScriptToRustBuilder::new(options);
     builder.visit_entrypoints();
-    // let types = builder.get_types();
 
     // Get the axe.d.ts module path
     let axe_dts_path = PathBuf::from("examples/axe/node_modules/axe-core/axe.d.ts")
         .canonicalize()
         .expect("Failed to canonicalize axe.d.ts path");
 
-    let module_types = types.get(&axe_dts_path).expect("Module not found");
-
     // Verify RunOptions type structure
-    let run_options = module_types
-        .get("RunOptions")
+    let run_options = builder
+        .types
+        .get(&TypeScriptTypeId {
+            module: axe_dts_path.clone(),
+            name: "RunOptions".to_string(),
+        })
         .expect("RunOptions type not found");
 
     if let RSType::Struct(struct_type) = run_options {
@@ -150,7 +152,6 @@ fn test_generate_axe_types() {
         match run_only {
             RSType::Option(inner) => match &**inner {
                 RSType::Enum(enum_type) => {
-                    assert!(!enum_type.option, "Enum should not be optional");
                     assert_eq!(enum_type.variants.len(), 4, "Should have 4 variants");
 
                     // Check each variant
@@ -160,7 +161,7 @@ fn test_generate_axe_types() {
                             RSReference::Unresolved {
                                 local_name: name, ..
                             } => assert_eq!(name, "RunOnly"),
-                            RSReference::Resolved { name, .. } => assert_eq!(name, "RunOnly"),
+                            RSReference::Resolved { id, .. } => assert_eq!(id.name, "RunOnly"),
                         },
                         _ => panic!("First variant should be RunOnly reference"),
                     }
@@ -173,7 +174,7 @@ fn test_generate_axe_types() {
                                 } => {
                                     assert_eq!(name, "TagValue")
                                 }
-                                RSReference::Resolved { name, .. } => assert_eq!(name, "TagValue"),
+                                RSReference::Resolved { id, .. } => assert_eq!(id.name, "TagValue"),
                             },
                             _ => panic!("Second variant should be TagValue array"),
                         },
@@ -206,7 +207,7 @@ fn test_generate_axe_types() {
                     RSReference::Unresolved {
                         local_name: name, ..
                     } => assert_eq!(name, "RuleObject"),
-                    RSReference::Resolved { name, .. } => assert_eq!(name, "RuleObject"),
+                    RSReference::Resolved { id, .. } => assert_eq!(id.name, "RuleObject"),
                 },
                 _ => panic!("rules should be RuleObject"),
             },
@@ -225,7 +226,7 @@ fn test_generate_axe_types() {
                         RSReference::Unresolved {
                             local_name: name, ..
                         } => assert_eq!(name, "resultGroups"),
-                        RSReference::Resolved { name, .. } => assert_eq!(name, "resultGroups"),
+                        RSReference::Resolved { id, .. } => assert_eq!(id.name, "resultGroups"),
                     },
                     _ => panic!("resultTypes should contain resultGroups enum"),
                 },
@@ -238,8 +239,12 @@ fn test_generate_axe_types() {
     }
 
     // Verify AxeResults type structure
-    let axe_results = module_types
-        .get("AxeResults")
+    let axe_results = builder
+        .types
+        .get(&TypeScriptTypeId {
+            module: axe_dts_path.clone(),
+            name: "AxeResults".to_string(),
+        })
         .expect("AxeResults type not found");
 
     if let RSType::Struct(struct_type) = axe_results {
@@ -277,7 +282,7 @@ fn test_generate_axe_types() {
                     RSReference::Unresolved {
                         local_name: name, ..
                     } => assert_eq!(name, "Result"),
-                    RSReference::Resolved { name, .. } => assert_eq!(name, "Result"),
+                    RSReference::Resolved { id, .. } => assert_eq!(id.name, "Result"),
                 },
                 _ => panic!("passes should contain Result type"),
             },
@@ -295,7 +300,7 @@ fn test_generate_axe_types() {
                     RSReference::Unresolved {
                         local_name: name, ..
                     } => assert_eq!(name, "Result"),
-                    RSReference::Resolved { name, .. } => assert_eq!(name, "Result"),
+                    RSReference::Resolved { id, .. } => assert_eq!(id.name, "Result"),
                 },
                 _ => panic!("violations should contain Result type"),
             },

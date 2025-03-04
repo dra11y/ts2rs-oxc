@@ -1,7 +1,8 @@
 use std::{fs, path::Path};
 
 use oxc_allocator::Allocator;
-use oxc_ast::{Visit, ast, visit::walk};
+use oxc_ast::ast::{ExportNamedDeclaration, ImportDeclaration, ImportDeclarationSpecifier};
+use oxc_ast_visit::{Visit, walk};
 use oxc_parser::{ParseOptions, Parser};
 use oxc_resolver::{ResolveOptions, Resolver};
 use oxc_span::SourceType;
@@ -9,7 +10,7 @@ use oxc_span::SourceType;
 struct TypeScriptToRustVisitor;
 
 impl<'a> Visit<'a> for TypeScriptToRustVisitor {
-    fn visit_export_named_declaration(&mut self, it: &ast::ExportNamedDeclaration<'a>) {
+    fn visit_export_named_declaration(&mut self, it: &ExportNamedDeclaration<'a>) {
         for spec in &it.specifiers {
             let exported_name = spec.exported.name().into_string();
             let export_kind = spec.export_kind;
@@ -24,17 +25,17 @@ impl<'a> Visit<'a> for TypeScriptToRustVisitor {
         walk::walk_export_named_declaration(self, it);
     }
 
-    fn visit_import_declaration(&mut self, it: &ast::ImportDeclaration<'a>) {
+    fn visit_import_declaration(&mut self, it: &ImportDeclaration<'a>) {
         let Some(specifiers) = &it.specifiers else {
             walk::walk_import_declaration(self, it);
             return;
         };
         for specifier in specifiers {
-            if let ast::ImportDeclarationSpecifier::ImportSpecifier(spec) = specifier {
+            if let ImportDeclarationSpecifier::ImportSpecifier(spec) = specifier {
                 let imported_name = spec.imported.name().into_string();
                 let import_kind = spec.import_kind;
-                let local_name = spec.local.name.clone().into_string();
-                let module_source = it.source.value.clone().into_string();
+                let local_name = spec.local.name.into_string();
+                let module_source = it.source.value.into_string();
 
                 println!(
                     "Found import: {import_kind:?} {imported_name} as {local_name} from {module_source:?}",
@@ -64,9 +65,10 @@ fn main() -> Result<(), String> {
 
     let specifier = &format!("./{}", file.to_string_lossy());
 
-    let resolver: oxc_resolver::ResolverGeneric<oxc_resolver::FileSystemOs> =
+    let resolver: oxc_resolver::ResolverGeneric<oxc_resolver::FsCache<oxc_resolver::FileSystemOs>> =
         Resolver::new(resolve_options);
-    let resolution: oxc_resolver::Resolution = resolver.resolve(dir, specifier).expect("resolve");
+    let resolution: oxc_resolver::Resolution<oxc_resolver::FsCache<oxc_resolver::FileSystemOs>> =
+        resolver.resolve(dir, specifier).expect("resolve");
     println!("resolution: {:#?}", resolution);
 
     let module_path: std::path::PathBuf = resolution.full_path();
